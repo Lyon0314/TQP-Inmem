@@ -1,4 +1,4 @@
 {
   "tables path": "",
-  "tensors path": "/root/container-files/tqp/data/"
+  "tensors path": "../tpch-dbgen-tensors/data"
 }

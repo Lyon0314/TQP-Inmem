@@ -47,3 +47,12 @@ Edit `config.json` so `tensors path` points to the `data/` directory produced by
 ```
 "tensors path": "/path/to/tpch-dbgen-tensors/data"
 ```
+
+
+## RTX 5080 research branch
+
+For this branch on the tested RTX 5080, follow [REPRODUCE.md](REPRODUCE.md)
+for the cu130 GPU environment, separate CPU data-generator environment,
+relative data path, correctness checks and four-way experiments. The original
+cu126 commands above did not support this GPU in the tested installation.
+The GPU pool in this branch is 8 GB, not the upstream 40 GB.

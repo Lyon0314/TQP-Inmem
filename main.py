@@ -11,7 +11,7 @@ import sys
 import parsing
 # TQP: Tensor Programs
 from operators.scan import tqp_scan
-from operators.filter import tqp_filter 
+from operators.filter import tqp_filter
 from operators.project import tqp_project
 from operators.aggregate import tqp_hash_aggregate
 from operators.sort import tqp_sort
@@ -22,7 +22,7 @@ from IO.pinned_mem import PinnedMemory, GPUMemory
 
 subquery_result = None
 gpu_enable          = True
-force_generate_plan = False 
+force_generate_plan = False
 
 def warmup():
     exec(1, list(range(1, 23)), None, None, True, None, None, None)
@@ -31,7 +31,7 @@ pinned_pool = None
 gpu_memory_pool = None
 
 def exec(scale_factor, qids, perf_report, log, no_debug, torch_profile_dir, datasize_profile_dir, time_output_file):
-    
+
     # message_logger().debug("[Read Configuration & Schema JSON]")
     with open('config.json', 'r') as f:
         config_json = json.load(f)
@@ -39,7 +39,7 @@ def exec(scale_factor, qids, perf_report, log, no_debug, torch_profile_dir, data
         schema_json = json.load(f)
     global pinned_pool
     global gpu_memory_pool
-    
+
     print("Pinning CPU memory...", flush=True)
     if scale_factor == 1:
         pinned_pool = PinnedMemory(capacity_gb=15, block_size_mb= int(15 / 2000 * 1000 ))
@@ -50,14 +50,14 @@ def exec(scale_factor, qids, perf_report, log, no_debug, torch_profile_dir, data
     else:
         pinned_pool = PinnedMemory(capacity_gb=250, block_size_mb= int(250 / 2000 * 1000 ))
     print("done!", flush=True)
-    
+
     if gpu_memory_pool is None:
         print("Allocating GPU Memory...", flush=True)
-        gpu_memory_pool = GPUMemory(capacity_gb=40, block_size_mb=(40 / 2000 * 2000))
+        gpu_memory_pool = GPUMemory(capacity_gb=8, block_size_mb=(40 / 2000 * 2000))
         print("done!", flush=True)
 
     set_message_logger(log, not no_debug)
-    
+
     with open("results.out", "w", encoding="utf-8") as f: # Clear outputs for this run
         pass
 
@@ -91,7 +91,7 @@ def exec(scale_factor, qids, perf_report, log, no_debug, torch_profile_dir, data
             message_logger().info("[Spark Initialization]")
             parsing_layer = parsing.ParsingLayer()
             message_logger().info("[Generate Physical Plan]")
-            
+
             with perf_logger().time("Spark plan generation"):
                 query_plans = parsing_layer.generate(query, qid)
 
@@ -118,7 +118,7 @@ def exec(scale_factor, qids, perf_report, log, no_debug, torch_profile_dir, data
         perf_logger().start(f"Query {qid}")
         read_time, trans_time, output_time = 0, 0, 0
         q_start_time = time.time()
-        
+
         subquery_result = None
         for query_plan in query_plans:
             tensor_group = {}
@@ -128,7 +128,7 @@ def exec(scale_factor, qids, perf_report, log, no_debug, torch_profile_dir, data
                 subquery_result /= scale_factor
 
             for u in ops:
-                args_u = args[u]    
+                args_u = args[u]
                 name = args_u['name']
                 datasize_logger().set_operator(name)
                 message_logger().info("%s %s", "\n", f"Executing operator {u} {name}")
@@ -148,7 +148,7 @@ def exec(scale_factor, qids, perf_report, log, no_debug, torch_profile_dir, data
                             mem_pool=gpu_memory_pool
                         )
                     read_time += time.time() - time_1
-                    
+
                 elif name == 'Filter':
                     child = parent_tree[u][0]
                     with torch_profiler().profile(f"filter {u}"):
@@ -172,7 +172,7 @@ def exec(scale_factor, qids, perf_report, log, no_debug, torch_profile_dir, data
                         name=f"project {u}"
                     )
 
-                elif name == 'Aggregate': 
+                elif name == 'Aggregate':
                     with torch_profiler().profile(f"aggregation {u}"):
                         num_rows = tqp_hash_aggregate(
                             gpu_enable,
@@ -182,7 +182,7 @@ def exec(scale_factor, qids, perf_report, log, no_debug, torch_profile_dir, data
                             gpu_mem_pool=gpu_memory_pool,
                             name=f"aggregation {u}"
                         )
-                    
+
                 elif name.endswith('Exchange'):
                     assert False, "Exchange is eliminated"
 
@@ -215,7 +215,7 @@ def exec(scale_factor, qids, perf_report, log, no_debug, torch_profile_dir, data
                                 condition_list.append([f'#{left_keys[0]}', '=', f'#{right_keys[0]}'])
                             else:
                                 condition_list.append([f'#{left_keys[1]}', '=', f'#{right_keys[1]}'])
-                        
+
                         message_logger().debug(f"Join on {join_left_key} = {join_right_key}")
                         message_logger().debug(f"condition list = {condition_list}")
                         message_logger().debug(f"[left and right keys], {left_keys}, {right_keys}")
@@ -266,18 +266,18 @@ def exec(scale_factor, qids, perf_report, log, no_debug, torch_profile_dir, data
                         if len(query_plans) > 1:
                             subquery_result = float(df_result.iloc[0, 0])
                             message_logger().info(f"subquery_result = %s", subquery_result)
-                        
+
                 else:
                     raise Exception(f"Unsupported Operator: {name}")
-                
+
                 if gpu_enable:
                     torch.cuda.synchronize()
-                
+
                 op_end = time.time()
-                op_time = op_end - op_start    
+                op_time = op_end - op_start
 
                 message_logger().info(f"Operator Time = {op_time:.4f}")
-        
+
         perf_logger().stop(f"Query {qid}")
         time_elapsed = time.time() - q_start_time - read_time - output_time   # We manually subtract the time reading from disk and writing to output
 
@@ -305,7 +305,7 @@ def exec(scale_factor, qids, perf_report, log, no_debug, torch_profile_dir, data
             perf_logger().report(os.path.join(perf_report, f"SF{scale_factor}_{qid}.json"))
         if datasize_profile_dir:
             datasize_logger().report(f"SF{scale_factor}_Q{qid}.json")
-    
+
 if __name__ == "__main__":
 
     print(torch.__version__)
@@ -321,7 +321,7 @@ if __name__ == "__main__":
     parser.add_argument('--datasize_profile', type=str, required=False, help='Transferred data size output directory')
     parser.add_argument('--test', action='store_true', help='End to end testing for correcteness on TPCH')
     parser.add_argument('--warmup_iter', type=int, default=0, help='Number of warmup iterations')
-    parser.add_argument('--time_output_file', type=str, required=False, help='File to save performance numbers')    
+    parser.add_argument('--time_output_file', type=str, required=False, help='File to save performance numbers')
 
     args = parser.parse_args()
 
@@ -331,13 +331,13 @@ if __name__ == "__main__":
         import pathlib
         import pytest
         test_path = pathlib.Path(__file__).with_name("test_main.py")
-        sys.exit(pytest.main(["-q", str(test_path)]))       
+        sys.exit(pytest.main(["-q", str(test_path)]))
 
-    message_logger().info("Starting Warmup") 
+    message_logger().info("Starting Warmup")
     for _ in range(args.warmup_iter):
         warmup()
     message_logger().info("Warmup Finished")
 
     with torch.inference_mode():
         exec(args.SF, args.q, args.perf_report, args.log, args.no_debug, args.torch_profile, args.datasize_profile, args.time_output_file)
-    
+

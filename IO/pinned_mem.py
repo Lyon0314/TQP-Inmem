@@ -43,7 +43,7 @@ class MemoryPool:
         return ptr, storage.view(to_alloc_dtype)
     
     def malloc_like(self, subject_tensor: torch.Tensor):
-        ptr, storage = self.get_storage(subject_tensor.view(-1).numel() * subject_tensor.element_size())
+        ptr, storage = self.get_storage(subject_tensor.numel() * subject_tensor.element_size())
         return ptr, storage.view(subject_tensor.dtype).view(subject_tensor.shape) 
     
     def malloc_list(self, subject:List[torch.tensor]):

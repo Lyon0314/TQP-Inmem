@@ -1,4 +1,5 @@
 import torch
+import os
 from IO.vortex_pipeline import InMemoryPipeline 
 from operators.aggregate import evaluate, right_most
 from variable import Variable, torch_to_type
@@ -9,6 +10,7 @@ from utility.logger import message_logger
 
 def tqp_project(gpu_enable, tensor_group, args, cpu_mem_pool, gpu_mem_pool, name="project"):
   device_name = 'cuda' if gpu_enable else 'cpu'
+  preserve_dtype = os.environ.get("TQP_PROJECT_NATIVE", "0") == "1"
 
   for orig, new in args['rename map'].items():
     tensor_group[new] = tensor_group[orig]
@@ -37,7 +39,10 @@ def tqp_project(gpu_enable, tensor_group, args, cpu_mem_pool, gpu_mem_pool, name
             if need_to_record_types:
               result_types.append(result.dtype)
 
-            result = result.to(constants.float_dtype)
+            # malloc_like preserves the actual tensor dtype. Avoid a temporary
+            # float conversion followed by a conversion back after the pool copy.
+            if not preserve_dtype:
+              result = result.to(constants.float_dtype)
             o_tensors.append(result)
       
       need_to_record_types = False

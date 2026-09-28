@@ -1,4 +1,5 @@
 import torch
+import os
 import constants
 
 import conversion
@@ -55,7 +56,7 @@ def get_ops(tree):
         return r
     return ''
 
-def evaluate(device_name, tensors, tree, cnt_rows, cnt_groups, inverted_index):
+def evaluate(device_name, tensors, tree, cnt_rows, cnt_groups, inverted_index, aggregation_cache=None):
   if isinstance(tree, str):   # date or number
     if tree.isdigit():        # no negative
       return int(tree)
@@ -67,19 +68,19 @@ def evaluate(device_name, tensors, tree, cnt_rows, cnt_groups, inverted_index):
       return tree
 
   if len(tree) == 1:
-    return evaluate(device_name, tensors, tree[0], cnt_rows, cnt_groups, inverted_index)
+    return evaluate(device_name, tensors, tree[0], cnt_rows, cnt_groups, inverted_index, aggregation_cache)
 
   if len(tree) == 3 and tree[1] == '#':
     assert isinstance(tree[0], list)   # [['avg', ['l_quantity', '#', '313']], '#', '307']
-    return evaluate(device_name, tensors, tree[0], cnt_rows, cnt_groups, inverted_index)
+    return evaluate(device_name, tensors, tree[0], cnt_rows, cnt_groups, inverted_index, aggregation_cache)
 
   if len(tree) == 8:
     assert tree[0] == 'CASE' and tree[1] == 'WHEN' and tree[3] == 'THEN' \
           and tree[5] == 'ELSE' and tree[7] == 'END'
     # e.g., ['CASE', 'WHEN', ['nation#307', '=', 'BRAZIL'], 'THEN', 'volume#306', 'ELSE', '0.0', 'END']
-    mask = evaluate(device_name, tensors, tree[2], cnt_rows, cnt_groups, inverted_index)
-    then = evaluate(device_name, tensors, tree[4], cnt_rows, cnt_groups, inverted_index)
-    elsc = evaluate(device_name, tensors, tree[6], cnt_rows, cnt_groups, inverted_index)
+    mask = evaluate(device_name, tensors, tree[2], cnt_rows, cnt_groups, inverted_index, aggregation_cache)
+    then = evaluate(device_name, tensors, tree[4], cnt_rows, cnt_groups, inverted_index, aggregation_cache)
+    elsc = evaluate(device_name, tensors, tree[6], cnt_rows, cnt_groups, inverted_index, aggregation_cache)
 
     # DO NOT Support String in CASE
     return torch.where(mask, then, elsc)
@@ -95,21 +96,21 @@ def evaluate(device_name, tensors, tree, cnt_rows, cnt_groups, inverted_index):
       return o
     
     if tree[0] == 'year':
-      R = evaluate(device_name, tensors, tree[1], cnt_rows, cnt_groups, inverted_index)
+      R = evaluate(device_name, tensors, tree[1], cnt_rows, cnt_groups, inverted_index, aggregation_cache)
 
       bin_idx = torch.bucketize(R, torch.tensor(conversion.year_edges, device='cuda'), right=True)
       return torch.tensor(conversion.year_range, device='cuda')[bin_idx]
 
     if tree[0] == 'NOT':
-      return ~ evaluate(device_name, tensors, tree[1], cnt_rows, cnt_groups, inverted_index)
+      return ~ evaluate(device_name, tensors, tree[1], cnt_rows, cnt_groups, inverted_index, aggregation_cache)
     
     if tree[0] == 'cast':
       # 'ps_availqty#97 as double'
       literal, _, cast_type = tree[1][0].split(' ')
       if cast_type == 'double':
         # TODO: use double after rocm pytorch fix!!
-        return evaluate(device_name, tensors, literal, cnt_rows, cnt_groups, inverted_index)
-        # return evaluate(device_name, tensors, literal, cnt_rows, cnt_groups, inverted_index).double()
+        return evaluate(device_name, tensors, literal, cnt_rows, cnt_groups, inverted_index, aggregation_cache)
+        # return evaluate(device_name, tensors, literal, cnt_rows, cnt_groups, inverted_index, aggregation_cache).double()
       raise ValueError(f"Unsupported cast type: {cast_type}")
     
     if tree[0] == 'substring':
@@ -117,12 +118,12 @@ def evaluate(device_name, tensors, tree, cnt_rows, cnt_groups, inverted_index):
       assert len(tree[1]) == 3
       sub, l, w = tree[1]
       l, w = int(l) - 1, int(w)
-      return evaluate(device_name, tensors, sub, cnt_rows, cnt_groups, inverted_index)[:, l:l+w]
+      return evaluate(device_name, tensors, sub, cnt_rows, cnt_groups, inverted_index, aggregation_cache)[:, l:l+w]
     
     if tree[0] not in ['sum', 'avg', 'count', 'min', 'max']:
       raise ValueError(f"Unsupported aggregation function: {tree[0]}")
     
-    tensor_tmp = evaluate(device_name, tensors, tree[1], cnt_rows, cnt_groups, inverted_index)
+    tensor_tmp = evaluate(device_name, tensors, tree[1], cnt_rows, cnt_groups, inverted_index, aggregation_cache)
 
     enable_2steps = False
     if cnt_rows / cnt_groups >= (1 << 16): 
@@ -133,8 +134,15 @@ def evaluate(device_name, tensors, tree, cnt_rows, cnt_groups, inverted_index):
     def scatter_reduce_2steps(inverted_index, tensor_tmp, cnt_groups, num_subgroups=1024, reduce='max', initv=0):
       N = inverted_index.size(0)
       device = tensor_tmp.device
-      subgroup_id = torch.arange(N, device=device) % num_subgroups
-      flat_index = inverted_index * num_subgroups + subgroup_id
+      # Reuse only within this aggregation invocation, never across queries.
+      cache_key = ('flat_index', num_subgroups)
+      if aggregation_cache is not None and cache_key in aggregation_cache:
+        flat_index = aggregation_cache[cache_key]
+      else:
+        subgroup_id = torch.arange(N, device=device) % num_subgroups
+        flat_index = inverted_index * num_subgroups + subgroup_id
+        if aggregation_cache is not None:
+          aggregation_cache[cache_key] = flat_index
       result_2d = torch.full((cnt_groups * num_subgroups,), initv, dtype=tensor_tmp.dtype, device=device)
       result_2d = torch.scatter_reduce(result_2d, 0, flat_index, tensor_tmp, reduce=reduce)
       result_2d = result_2d.view(cnt_groups, num_subgroups)
@@ -199,7 +207,7 @@ def evaluate(device_name, tensors, tree, cnt_rows, cnt_groups, inverted_index):
   op = tree[-2]
   
   if op == 'AS':
-    return evaluate(device_name, tensors, tree[0], cnt_rows, cnt_groups, inverted_index)
+    return evaluate(device_name, tensors, tree[0], cnt_rows, cnt_groups, inverted_index, aggregation_cache)
   ops = {
     '+': torch.add,
     '-': torch.sub,
@@ -217,8 +225,8 @@ def evaluate(device_name, tensors, tree, cnt_rows, cnt_groups, inverted_index):
   if op not in ops:
     raise ValueError(f"Unsupported Operation: {op}")
 
-  L = evaluate(device_name, tensors, tree[0], cnt_rows, cnt_groups, inverted_index)
-  R = evaluate(device_name, tensors, tree[-1], cnt_rows, cnt_groups, inverted_index)
+  L = evaluate(device_name, tensors, tree[0], cnt_rows, cnt_groups, inverted_index, aggregation_cache)
+  R = evaluate(device_name, tensors, tree[-1], cnt_rows, cnt_groups, inverted_index, aggregation_cache)
 
   if isinstance(R, str):    # DO NOT SUPPORT STRING < and >
     if isinstance(L, int):  # 1-URGENT
@@ -331,6 +339,7 @@ def tqp_hash_aggregate(gpu_enable, tensor_group, args, gpu_mem_pool, cpu_mem_poo
       del tmp_col, key_cols
 
     cnt_groups = unique_key_cols.shape[0]
+    aggregation_cache = {} if os.environ.get("TQP_AGG_REUSE", "0") == "1" else None
 
     for tree in args['results']:
       while isinstance(tree, list) and len(tree) == 1:
@@ -346,7 +355,7 @@ def tqp_hash_aggregate(gpu_enable, tensor_group, args, gpu_mem_pool, cpu_mem_poo
         device_out_tensor_group[agg_id] = device_out_tensor_group[agg_id].to(columns[key_id].tensor.dtype)
       else:
         # Aggregation
-        device_out_tensor_group[agg_id] = evaluate(device_name, columns, tree[0], cnt_rows, cnt_groups, inverted_index)
+        device_out_tensor_group[agg_id] = evaluate(device_name, columns, tree[0], cnt_rows, cnt_groups, inverted_index, aggregation_cache)
         # e.g, sum((l_extendedprice#53 * (1.0 - l_discount#54)))#319 AS sum_disc_price#307
         # e.g, (0.2 * avg(l_quantity#313)#307) AS (0.2 * avg(l_quantity))#308
 
