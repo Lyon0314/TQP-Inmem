@@ -1,0 +1,10 @@
+Synthetic aggregation evaluator; GPU: NVIDIA GeForce RTX 5080
+rows,groups,two_step,original_median_ms,reuse_median_ms,original_min_ms,original_max_ms,reuse_min_ms,reuse_max_ms
+65536,4,0,0.289535,0.288719,0.288304,0.293214,0.283975,0.290044
+65536,64,0,0.233086,0.232907,0.22551,0.2391,0.232592,0.23561
+262144,4,1,0.271941,0.183646,0.267942,0.328831,0.18004,0.438828
+262144,64,0,0.190565,0.184929,0.18236,0.466462,0.183024,0.188243
+1048576,4,1,0.421779,0.257982,0.420615,0.514165,0.254437,0.260852
+1048576,64,0,0.263736,0.269573,0.253476,0.278965,0.254497,0.385378
+PASS: all synthetic results matched reference sums/means.
+Synthetic GPU-resident inputs; synchronized host timings; not TPC-H scale factors.

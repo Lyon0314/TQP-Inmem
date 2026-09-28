@@ -1,0 +1,16 @@
+18:15:58 INFO [project projection pipe] elapsed: 0.000101s (count=1, total=0.000101s, avg=0.000101s)
+18:15:58 INFO [project projection pipe] elapsed: 0.000024s (count=2, total=0.000125s, avg=0.000062s)
+PASS original and native: substring slice
+18:15:58 INFO [project projection pipe] elapsed: 0.000101s (count=3, total=0.000225s, avg=0.000075s)
+18:15:58 INFO [project projection pipe] elapsed: 0.000026s (count=4, total=0.000251s, avg=0.000063s)
+PASS original and native: integer addition
+18:15:58 INFO [project projection pipe] elapsed: 0.000048s (count=5, total=0.000300s, avg=0.000060s)
+18:15:58 INFO [project projection pipe] elapsed: 0.000019s (count=6, total=0.000319s, avg=0.000053s)
+PASS original and native: decimal multiplication
+18:15:58 INFO [project projection pipe] elapsed: 0.000075s (count=7, total=0.000394s, avg=0.000056s)
+18:15:58 INFO [project projection pipe] elapsed: 0.000021s (count=8, total=0.000415s, avg=0.000052s)
+PASS original and native: boolean comparison
+18:15:58 INFO [project projection pipe] elapsed: 0.000020s (count=9, total=0.000435s, avg=0.000048s)
+PASS native: large-integer precision
+PASS: 10 full-array checks, including non-contiguous allocation/copy.
+Scope: nonempty projection results; not exhaustive SQL or empty-input coverage.

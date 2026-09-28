@@ -1,0 +1,7 @@
+PASS rows=32, groups=4, skew=False
+PASS rows=131070, groups=2, skew=False
+PASS rows=131072, groups=2, skew=False
+PASS rows=262144, groups=2, skew=True
+PASS rows=131072, groups=1, skew=False
+PASS: 110 full-vector checks; integer/float, threshold, skew, null counts, cache reuse.
+Scope: nonempty groups, positive inputs; not a complete SQL semantics test.

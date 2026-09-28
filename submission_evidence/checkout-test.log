@@ -1,0 +1,14 @@
+2.14.0+cu130
+13.0
+.                                                                        [100%]
+=============================== warnings summary ===============================
+test_main.py: 25 warnings
+  /home/lyonchen/miniforge3/envs/torch126/lib/python3.12/site-packages/torch/jit/_serialization.py:176: FutureWarning: `torch.jit.load` is deprecated. Please switch to `torch.export`.
+    warnings.warn(
+
+test_main.py: 48 warnings
+  /home/lyonchen/miniforge3/envs/torch126/lib/python3.12/site-packages/pandas/core/construction.py:646: DeprecationWarning: __array__ implementation doesn't accept a copy keyword, so passing copy=False failed. __array__ must implement 'dtype' and 'copy' keyword arguments. To learn more, see the migration guide https://numpy.org/devdocs/numpy_2_0_migration_guide.html#adapting-to-changes-in-the-copy-keyword
+    data = np.array(data, copy=copy)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+1 passed, 73 warnings in 10.24s
